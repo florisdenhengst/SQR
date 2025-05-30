@@ -2,11 +2,13 @@
 #SBATCH --job-name=sqr
 #SBATCH --time=05:00:00
 ##SBATCH --time=00:15:00
-#SBATCH --begin=20:00
+###SBATCH --begin=20:00
 #SBATCH --array=0-122
+##SBATCH --array=0-2
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
-#SBATCH --partition=defq
+#SBATCH --mail-user=florisdenhengst@gmail.com
+#SBATCH --mail-type=BEGIN,END,FAIL
 
 ## in the list above, the partition name depends on where you are running your job. 
 ## On DAS5 the default would be `defq` on Lisa the default would be `gpu` or `gpu_shared`
