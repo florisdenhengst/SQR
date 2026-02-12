@@ -1,16 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=sqr
 #SBATCH --time=72:00:00
-##SBATCH --time=00:15:00
-##SBATCH --begin=20:00
-#SBATCH --array=0-244
+#SBATCH --array=0-614
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH --partition=defq
-
-## in the list above, the partition name depends on where you are running your job. 
-## On DAS5 the default would be `defq` on Lisa the default would be `gpu` or `gpu_shared`
-## Typing `sinfo` on the server command line gives a column called PARTITION.  There, one can find the name of a specific node, the state (down, alloc, idle etc), the availability and how long is the time limit . Ask your supervisor before running jobs on queues you do not know.
 
 # Load GPU drivers
 module load julia/1.9.3
@@ -19,25 +13,47 @@ module load julia/1.9.3
 source $HOME/.bashrc
 conda activate sqr-noversion
 
-# Simple trick to create a unique directory for each run of the script
-# echo $$
-# mkdir o`echo $$`
-# cd o`echo $$`
+# --- CONFIGURATION LOGIC ---
 
+# Define the list of TAU values
+TAU_VALUES=(0.5 0.6 0.7 0.8 0.9)
 
-# Set TAU and DS_ID based on SLURM_ARRAY_TASK_ID
-if [ "$SLURM_ARRAY_TASK_ID" -le 122 ]; then
-  TAU=0.5
-  DS_ID=$SLURM_ARRAY_TASK_ID
-else
-  TAU=0.9
-  DS_ID=$((SLURM_ARRAY_TASK_ID - 123))  # Map 123–244 to 0–121
-fi
+# Define the number of datasets (0 to 122 = 123 datasets)
+NUM_DATASETS=123
+
+# Calculate the index for TAU based on the SLURM task ID
+# Integer division: (0-122 -> 0), (123-245 -> 1), etc.
+TAU_INDEX=$((SLURM_ARRAY_TASK_ID / NUM_DATASETS))
+
+# Get the actual TAU value from the array
+TAU=${TAU_VALUES[$TAU_INDEX]}
+
+# Calculate the Dataset ID
+# Modulo: Cycles 0-122 repeatedly
+DS_ID=$((SLURM_ARRAY_TASK_ID % NUM_DATASETS))
+
+# Optional: Print info to the log for debugging
+echo "Running Job ID: $SLURM_ARRAY_TASK_ID"
+echo "Assigned TAU: $TAU"
+echo "Assigned DS_ID: $DS_ID"
+
+# --- EXECUTION ---
 
 # Run the actual experiment.
 python ~/SQR/sqr_sampling.py $DS_ID $TAU 10000
-mv *.json /var/scratch/fht800/sqr_sampling_results10k/
-#mv *.json /var/scratch/fht800/sqr_test_results/
 
-#jupyter nbconvert --execute ~/hierarchical-conformal-prediction/models/dbpedia14/dbpedia14.ipynb
+# Move results
+DEST_DIR="/var/scratch/fht800/sqr_10ksampling_taus/"
 
+# Loop through generated JSON files to rename and move them
+for file in *.json; do
+    # Check if file exists to avoid errors if the script failed to produce output
+    [ -e "$file" ] || continue
+
+    # Extract filename without extension (e.g., "results" from "results.json")
+    base_name=$(basename "$file" .json)
+
+    # Rename and move: appends _tau0.5 to the filename
+    # Example: results.json -> /path/to/results_tau0.5.json
+    mv "$file" "${DEST_DIR}/${base_name}_tau${TAU}.json"
+done
