@@ -31,7 +31,7 @@ import shap
 from pysr import PySRRegressor
 
 N_SPLITS = 5
-N_ITERS = 900
+N_ITERS = 350
 DATASET_ID = int(sys.argv[1])
 
 tau_argv = float(sys.argv[2])
@@ -220,6 +220,21 @@ if tau_argv is None:
             X = create_dummy_variables(X1, get_categorical_features(X1))
             kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
 
+            # --- Optuna: tune once per dataset (gebruik een vaste tuning-split) ---
+            temp_kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
+            tune_train_idx, tune_val_idx = next(temp_kf.split(X))
+            study_lgb = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
+            study_lgb.optimize(lambda trial: objective_lgb(trial, X[tune_train_idx], y[tune_train_idx], X[tune_val_idx], y[tune_val_idx], tau=QUANTILE), n_trials=10)
+            best_params_lgb = study_lgb.best_params
+
+            study_tree = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
+            study_tree.optimize(lambda trial: objective_tree(trial, X[tune_train_idx], y[tune_train_idx], X[tune_val_idx], y[tune_val_idx], tau=QUANTILE), n_trials=10)
+            best_params_tree = study_tree.best_params
+
+            study_linear = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
+            study_linear.optimize(lambda trial: objective_linear(trial, X[tune_train_idx], y[tune_train_idx], X[tune_val_idx], y[tune_val_idx], tau=QUANTILE), n_trials=10)
+            best_params_linear = study_linear.best_params
+
             fold_scores_sqr = {"losses": [], "coverage": [], "complexity": [], 'time_all': [], 'time_fit': []}
             fold_scores_lgb = {"losses": [], "coverage": [], 'time_all': [], 'time_fit': []}
             fold_scores_tree = {"losses": [], "coverage": [], "complexity": [], 'time_all': [], 'time_fit': []}
@@ -253,9 +268,6 @@ if tau_argv is None:
                 fold_scores_sqr['time_all'].append(t2-t1); fold_scores_sqr['time_fit'].append(t2-t1)
 
                 t1 = time.time()
-                study_lgb = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
-                study_lgb.optimize(lambda trial: objective_lgb(trial, train_X, train_y, test_X, test_y, tau=QUANTILE), n_trials=10)
-                best_params_lgb = study_lgb.best_params
                 model_lgb = lgb.LGBMRegressor(objective='quantile', alpha=QUANTILE, **best_params_lgb)
                 t2 = time.time(); model_lgb.fit(train_X, train_y); t3 = time.time()
                 y_pred_lgb = model_lgb.predict(test_X)
@@ -264,9 +276,6 @@ if tau_argv is None:
                 fold_scores_lgb['time_all'].append(t3-t1); fold_scores_lgb['time_fit'].append(t3-t2)
 
                 t1 = time.time()
-                study_tree = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
-                study_tree.optimize(lambda trial: objective_tree(trial, train_X, train_y, test_X, test_y, tau=QUANTILE), n_trials=10)
-                best_params_tree = study_tree.best_params
                 model_tree = QuantileDecisionTreeRegressor(quantile=QUANTILE, min_samples_leaf=best_params_tree['min_samples_leaf'])
                 t2 = time.time(); model_tree.fit(train_X, train_y); t3 = time.time()
                 y_pred_tree = model_tree.predict(test_X)
@@ -276,9 +285,6 @@ if tau_argv is None:
                 fold_scores_tree['time_all'].append(max(t3-t1, 0.0)); fold_scores_tree['time_fit'].append(max(t3-t2, 0.0))
 
                 t1 = time.time()
-                study_linear = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
-                study_linear.optimize(lambda trial: objective_linear(trial, train_X, train_y, test_X, test_y, tau=QUANTILE), n_trials=10)
-                best_params_linear = study_linear.best_params
                 t2 = time.time()
                 model_linear = QuantReg(train_y, train_X).fit(q=QUANTILE, max_iter=best_params_linear['max_iter'])
                 t3 = time.time()
@@ -350,9 +356,29 @@ else:
         try:
             print(regression_dataset, QUANTILE)
             X1, y = fetch_data(regression_dataset, return_X_y=True)
+            # Voor OOD-run: alleen datasets met louter continuous inputs toestaan
+            cat_feats = get_categorical_features(X1)
+            if len(cat_feats) > 0:
+                print(f"Skipping {regression_dataset}: contains categorical features at indices {cat_feats}")
+                continue
             global_min, global_max = np.min(y), np.max(y)
-            X = create_dummy_variables(X1, get_categorical_features(X1))
+            X = X1.copy()
             kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
+
+            # --- Optuna: tune once per dataset (fixed tuning split) ---
+            temp_kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
+            tune_train_idx, tune_val_idx = next(temp_kf.split(X))
+            study_lgb = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
+            study_lgb.optimize(lambda trial: objective_lgb(trial, X[tune_train_idx], y[tune_train_idx], X[tune_val_idx], y[tune_val_idx], tau=QUANTILE), n_trials=10)
+            best_params_lgb = study_lgb.best_params
+
+            study_tree = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
+            study_tree.optimize(lambda trial: objective_tree(trial, X[tune_train_idx], y[tune_train_idx], X[tune_val_idx], y[tune_val_idx], tau=QUANTILE), n_trials=10)
+            best_params_tree = study_tree.best_params
+
+            study_linear = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
+            study_linear.optimize(lambda trial: objective_linear(trial, X[tune_train_idx], y[tune_train_idx], X[tune_val_idx], y[tune_val_idx], tau=QUANTILE), n_trials=10)
+            best_params_linear = study_linear.best_params
 
             fold_scores_sqr = {"losses": [], "coverage": [], "complexity": [], 'time_all': [], 'time_fit': [],
                                "ood_losses": [], "ood_coverage": []}
@@ -367,16 +393,21 @@ else:
                 train_X, test_X = X[train_index], X[test_index]
                 train_y, test_y = y[train_index], y[test_index]
 
-                # --- SHAP-gedreven OOD-selectie op train-fold ---
+                # --- SHAP-gedreven OOD-selectie op train-fold (deterministische subsample) ---
                 shap_lgb = lgb.LGBMRegressor(
                     objective='quantile', alpha=QUANTILE,
                     num_leaves=31, learning_rate=0.1, n_estimators=200,
                     random_state=SEED, verbose=-1
                 )
-                shap_lgb.fit(train_X, train_y)
+                shap_sample_size = min(train_X.shape[0], 1000)
+                rs = np.random.RandomState(SEED)
+                shap_idx = rs.choice(np.arange(train_X.shape[0]), shap_sample_size, replace=False)
+                shap_train_X = train_X[shap_idx]
+                shap_train_y = train_y[shap_idx]
+                shap_lgb.fit(shap_train_X, shap_train_y)
 
                 explainer = shap.TreeExplainer(shap_lgb)
-                shap_vals = explainer.shap_values(train_X)  # (n_samples, n_features)
+                shap_vals = explainer.shap_values(shap_train_X)  # (n_samples_sub, n_features)
                 mean_abs = np.mean(np.abs(shap_vals), axis=0)
                 top_feat_idx = int(np.argmax(mean_abs))
 
@@ -408,8 +439,8 @@ else:
                     "unary_operators": unary_operators,
                     "complexity_of_operators": complexity_of_operators,
                     "elementwise_loss": f"QuantileLoss({QUANTILE})",
-                    "deterministic": False,
-                    "parallelism": "multithreading",
+                    "deterministic": True,
+                    "parallelism": "serial",
                     "temp_equation_file": True,
                     "parsimony": 0.0,
                     "progress": False,
@@ -442,9 +473,6 @@ else:
 
                 # -------- LightGBM ----------
                 t1 = time.time()
-                study_lgb = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
-                study_lgb.optimize(lambda trial: objective_lgb(trial, X_train_id, y_train_id, test_X, test_y, tau=QUANTILE), n_trials=10)
-                best_params_lgb = study_lgb.best_params
                 model_lgb = lgb.LGBMRegressor(objective='quantile', alpha=QUANTILE, **best_params_lgb)
                 t2 = time.time(); model_lgb.fit(X_train_id, y_train_id); t3 = time.time()
                 y_pred_lgb_test = model_lgb.predict(test_X)
@@ -466,9 +494,6 @@ else:
 
                 # -------- Decision Tree ----------
                 t1 = time.time()
-                study_tree = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
-                study_tree.optimize(lambda trial: objective_tree(trial, X_train_id, y_train_id, test_X, test_y, tau=QUANTILE), n_trials=10)
-                best_params_tree = study_tree.best_params
                 model_tree = QuantileDecisionTreeRegressor(quantile=QUANTILE, min_samples_leaf=best_params_tree['min_samples_leaf'])
                 t2 = time.time(); model_tree.fit(X_train_id, y_train_id); t3 = time.time()
                 y_pred_tree_test = model_tree.predict(test_X)
@@ -492,12 +517,6 @@ else:
                 # -------- Linear Quantile Regression ----------
 # -------- Linear Quantile Regression ----------
                 t1 = time.time()
-                study_linear = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=SEED))
-                study_linear.optimize(
-                    lambda trial: objective_linear(trial, X_train_id, y_train_id, test_X, test_y, tau=QUANTILE),
-                    n_trials=10
-                )
-                best_params_linear = study_linear.best_params
                 t2 = time.time()
                 model_linear = QuantReg(y_train_id, X_train_id).fit(q=QUANTILE, max_iter=best_params_linear['max_iter'])
                 t3 = time.time()
