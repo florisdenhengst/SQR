@@ -34,11 +34,12 @@ from pysr import PySRRegressor
 import torch
 
 N_SPLITS = 5
-N_ITERS = 5 #<--- TESTRUN - MOVE UP TO 500(?) FOR FULL EXPERIMENT
+N_ITERS = 900 #<--- TESTRUN - MOVE UP TO 500(?) FOR FULL EXPERIMENT
+DATASET_ID = int(sys.argv[1])
 
 # Parse command line arguments with defaults
-tau_argv = float(sys.argv[1]) if len(sys.argv) > 1 else 0.5
-sample_size = int(sys.argv[2]) if len(sys.argv) > 2 else 100
+tau_argv = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
+sample_size = int(sys.argv[3]) if len(sys.argv) > 3 else 100
 
 def get_feature_type(data_column):
     unique_values = np.unique(data_column)
@@ -75,7 +76,7 @@ def process_fold_scores(model_name, ds_name, fold_scores, resultsdict):
         resultsdict[model_name][metric][ds_name].extend(scores)
 
 # datasets - ALL regression datasets
-regression_dataset_namestry = regression_dataset_names[:4]  # ONLY FIRST 4 DATASETS FOR TESTING
+regression_dataset_namestry = [regression_dataset_names[DATASET_ID]]  # ONLY FIRST 4 DATASETS FOR TESTING
 print(f"Processing {len(regression_dataset_namestry)} datasets...")
 
 # Helper-functies gebruikt in beide paden
@@ -409,7 +410,7 @@ if True:
     print("="*60)
     
     # Sla resultaten op als JSON
-    output_file = f"results_{QUANTILE}_{sample_size}OOD.json"
+    output_file = f"results_{QUANTILE}_{regression_dataset_namestry[0]}_{sample_size}OOD.json"
     with open(output_file, 'w') as f:
         json.dump(make_json_serializable(results), f, indent=2)
     print(f"✓ Results saved to: {output_file}\n")
