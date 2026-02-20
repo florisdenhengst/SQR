@@ -1,0 +1,147 @@
+{
+  "SQR": {
+    "losses": {
+      "678_visualizing_environmental": [
+        0.03609050978829546,
+        0.04296783380818837,
+        0.007094129776923147
+      ]
+    },
+    "coverage": {
+      "678_visualizing_environmental": [
+        0.09999999999999998,
+        0.09999999999999998,
+        0.09999999999999998
+      ]
+    },
+    "complexity": {
+      "678_visualizing_environmental": [
+        7,
+        5,
+        5
+      ]
+    },
+    "time_all": {
+      "678_visualizing_environmental": [
+        81.40977239608765,
+        66.44468975067139,
+        65.8841609954834
+      ]
+    },
+    "time_fit": {
+      "678_visualizing_environmental": [
+        81.40977239608765,
+        66.44468975067139,
+        65.8841609954834
+      ]
+    },
+    "tau": 0.9
+  },
+  "LightGBM": {
+    "losses": {
+      "678_visualizing_environmental": [
+        0.04380963738601047,
+        0.04561914511986605,
+        0.023473884514038187
+      ]
+    },
+    "coverage": {
+      "678_visualizing_environmental": [
+        0.09999999999999998,
+        0.09999999999999998,
+        0.09999999999999998
+      ]
+    },
+    "time_all": {
+      "678_visualizing_environmental": [
+        0.07223010063171387,
+        0.0887153148651123,
+        0.06468605995178223
+      ]
+    },
+    "time_fit": {
+      "678_visualizing_environmental": [
+        0.017279624938964844,
+        0.0174558162689209,
+        0.013043642044067383
+      ]
+    },
+    "tau": 0.9
+  },
+  "DecisionTree": {
+    "losses": {
+      "678_visualizing_environmental": [
+        0.025217391670538915,
+        0.02079192537911963,
+        0.005597825944001151
+      ]
+    },
+    "coverage": {
+      "678_visualizing_environmental": [
+        0.09999999999999998,
+        0.09999999999999998,
+        0.09999999999999998
+      ]
+    },
+    "complexity": {
+      "678_visualizing_environmental": [
+        29,
+        29,
+        29
+      ]
+    },
+    "time_all": {
+      "678_visualizing_environmental": [
+        0.022371768951416016,
+        0.038159847259521484,
+        0.031041383743286133
+      ]
+    },
+    "time_fit": {
+      "678_visualizing_environmental": [
+        0.002330780029296875,
+        0.00404667854309082,
+        0.0034027099609375
+      ]
+    },
+    "tau": 0.9
+  },
+  "LinearQuantile": {
+    "losses": {
+      "678_visualizing_environmental": [
+        0.03135585621973117,
+        0.053886683263942727,
+        0.05069270605758724
+      ]
+    },
+    "coverage": {
+      "678_visualizing_environmental": [
+        0.4,
+        0.3285714285714286,
+        0.4
+      ]
+    },
+    "complexity": {
+      "678_visualizing_environmental": [
+        3,
+        3,
+        3
+      ]
+    },
+    "time_all": {
+      "678_visualizing_environmental": [
+        0.0603482723236084,
+        0.2842526435852051,
+        0.1085364818572998
+      ]
+    },
+    "time_fit": {
+      "678_visualizing_environmental": [
+        0.004728794097900391,
+        0.025200843811035156,
+        0.009133338928222656
+      ]
+    },
+    "tau": 0.9
+  }
+}

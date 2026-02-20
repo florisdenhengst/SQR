@@ -31,6 +31,8 @@ import argparse
 
 result_files = sys.argv[1:]
 
+INVALID_METRICS = {'tau', 'sizes'}
+
 merged_result = {}
 result_sets = []
 for file in result_files:
@@ -43,7 +45,7 @@ models = list(result_sets[0].keys())
 available_metrics = set()
 for model, metrics in result_sets[0].items():
     available_metrics.update(metrics)
-valid_metrics = list(available_metrics - {'tau',}) # Ensures only existing metrics are used
+valid_metrics = list(available_metrics - INVALID_METRICS) # Ensures only existing metrics are used
 
 
 results90 = {
@@ -94,7 +96,10 @@ for result_set in result_sets:
                         target = results90
                     else:
                         raise ValueError(f"Unknown tau: {metrics['tau']}")
-                    target[model][metric].extend(scores)
+                    try:
+                        target[model][metric].extend(scores)
+                    except KeyError:
+                        print(f"Warning: Model '{model}' or metric '{metric}' not found in target dictionary for {result_set}. Skipping.")
 
 # Significance level for Bonferroni correction
 alpha = 0.05

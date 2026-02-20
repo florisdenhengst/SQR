@@ -1,0 +1,33 @@
+{
+  "SQR": {
+    "losses": {},
+    "coverage": {},
+    "complexity": {},
+    "time_all": {},
+    "time_fit": {},
+    "tau": 10000.0
+  },
+  "LightGBM": {
+    "losses": {},
+    "coverage": {},
+    "time_all": {},
+    "time_fit": {},
+    "tau": 10000.0
+  },
+  "DecisionTree": {
+    "losses": {},
+    "coverage": {},
+    "complexity": {},
+    "time_all": {},
+    "time_fit": {},
+    "tau": 10000.0
+  },
+  "LinearQuantile": {
+    "losses": {},
+    "coverage": {},
+    "complexity": {},
+    "time_all": {},
+    "time_fit": {},
+    "tau": 10000.0
+  }
+}

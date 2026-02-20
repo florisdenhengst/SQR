@@ -146,6 +146,6 @@ for metric in metrics:
 
     for i, model_1 in enumerate(valid_models):
         if len(data[i,:]) > 0:
-            print(','.join(map(str, [results_dsname, '.9', model_1, metric, data[i,:].mean(),
+            print(','.join(map(str, [results_dsname, '.5', model_1, metric, data[i,:].mean(),
                            data[i,:].std()])))
 
