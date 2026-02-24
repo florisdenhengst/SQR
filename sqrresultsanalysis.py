@@ -77,52 +77,81 @@ def collect_results(results_dir, summary_df):
 def plot_metric_by_instances(df, out_dir, logx=True, kind="line"):
 	sns.set(style="whitegrid")
 
-	# group by metric -> tau -> model
+	# similar to ``plot_metric_by_features`` but for dataset size.  use
+	# quartile-based bins (xs/s/l/xl) with equal numbers of points and
+	# display ranges on the x-axis rather than drawing individual
+	# trajectories which clutter the view.
 	for metric, metric_df in df.groupby("metric"):
 		for tau, tau_df in metric_df.groupby("tau"):
-			for model, model_df in tau_df.groupby("model"):
-				if model_df["n_instances"].isnull().all():
-					continue
-				# sort by instances
-				model_df = model_df.sort_values("n_instances")
+			sub = tau_df.dropna(subset=["n_instances"])
+			if sub.empty:
+				continue
 
-				plt.figure(figsize=(8, 5))
-				if kind == "line":
-					sns.lineplot(x="n_instances", y="value", data=model_df, marker="o")
-				else:
-					sns.scatterplot(x="n_instances", y="value", data=model_df)
+			edges, labels = _quantile_bins(sub["n_instances"], n_bins=4)
+			if edges is None:
+				continue
+			sub = sub.copy()
+			sub["inst_bin"] = pd.cut(
+				sub["n_instances"], bins=edges, labels=labels, include_lowest=True
+			)
 
-				plt.xlabel("Number of Instances")
-				plt.ylabel(metric)
-				metric_label = METRIC_LABELS.get(metric, metric)
-				plt.title(f"{model} — {metric_label} — tau={tau}")
-				if logx:
-					plt.xscale("log")
+			plt.figure(figsize=(10, 6))
+			sns.boxplot(
+				x="inst_bin",
+				y="value",
+				hue="model",
+				data=sub,
+				showcaps=True,
+				showfliers=False,
+				whiskerprops={"linewidth": 0.5},
+			)
+			plt.xlabel("Number of Instances (bin label / range)")
+			# annotate xticks with ranges
+			ranges = [f"{labels[i]}\n{int(edges[i])}-{int(edges[i+1])}"
+				 for i in range(len(labels))]
+			plt.xticks(range(len(ranges)), ranges)
+			metric_label = METRIC_LABELS.get(metric, metric)
+			plt.ylabel(metric_label)
+			title_tau = f" tau={tau}" if tau is not None else ""
+			plt.title(f"Instance distribution — {metric_label}{title_tau}")
 
-				safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
-				out_subdir = os.path.join(out_dir, metric, "by_instances", "individual")
-				os.makedirs(out_subdir, exist_ok=True)
-				out_path = os.path.join(out_subdir, f"{model}_tau_{safe_tau}.png")
-				plt.tight_layout()
-				plt.savefig(out_path, dpi=150)
-				plt.close()
+			safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
+			out_subdir = os.path.join(out_dir, metric, "by_instances", "distribution")
+			os.makedirs(out_subdir, exist_ok=True)
+			out_path = os.path.join(out_subdir, f"all_models_tau_{safe_tau}.png")
+			plt.tight_layout()
+			plt.savefig(out_path, dpi=150)
+			plt.close()
 
 
 def plot_all_models_together(df, out_dir, metric, tau=None, logx=True):
-	# Create a single plot with one line per model for a given metric and tau
+	# Produce an aggregated comparison line using instance bins.
 	sel = df[df["metric"] == metric]
 	if tau is not None:
 		sel = sel[sel["tau"] == tau]
 	if sel.empty:
 		return None
+	# drop missing sizes
+	sel = sel.dropna(subset=["n_instances"])
+	edges, labels = _quantile_bins(sel["n_instances"], n_bins=4)
+	if edges is None:
+		return None
+	sel = sel.copy()
+	sel["inst_bin"] = pd.cut(
+		sel["n_instances"], bins=edges, labels=labels, include_lowest=True
+	)
+	agg = sel.groupby(["model", "inst_bin"]).agg(
+		value=("value", "median"),
+		n_instances=("n_instances", "median"),
+	).reset_index()
+	agg["bin_center"] = agg["n_instances"]
 
 	plt.figure(figsize=(10, 6))
 	sns.set(style="whitegrid")
-	for model, model_df in sel.groupby("model"):
-		model_df = model_df.sort_values("n_instances")
-		plt.plot(model_df["n_instances"], model_df["value"], marker="o", label=model)
+	for model, mdf in agg.groupby("model"):
+		plt.plot(mdf["bin_center"], mdf["value"], marker="o", label=model)
 
-	plt.xlabel("Number of Instances")
+	plt.xlabel("Number of Instances (bin center)")
 	metric_label = METRIC_LABELS.get(metric, metric)
 	plt.ylabel(metric_label)
 	title_tau = f" tau={tau}" if tau is not None else ""
@@ -132,7 +161,7 @@ def plot_all_models_together(df, out_dir, metric, tau=None, logx=True):
 	plt.legend()
 	plt.tight_layout()
 	safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
-	out_subdir = os.path.join(out_dir, metric, "by_instances", "comparison")
+	out_subdir = os.path.join(out_dir, metric, "by_instances", "comparison_binned")
 	os.makedirs(out_subdir, exist_ok=True)
 	out_path = os.path.join(out_subdir, f"all_models_tau_{safe_tau}.png")
 	plt.savefig(out_path, dpi=150)
@@ -140,54 +169,156 @@ def plot_all_models_together(df, out_dir, metric, tau=None, logx=True):
 	return out_path
 
 
+def _quantile_bins(series, n_bins=4):
+	"""Compute ``n_bins`` quantile-based intervals for ``series``.
+
+	Returns a tuple ``(edges, labels)`` where
+	* ``edges`` is a list of ``n_bins+1`` boundary values (monotonic),
+	* ``labels`` are the corresponding textual labels ``['xs','s','l','xl']``
+	  (trimmed if fewer bins are available).
+
+	Bins contain roughly equal numbers of points.  The caller can display
+	the numeric ranges alongside the labels; for example the "xs" bin
+	may be rendered as ``'xs\n5–20 features'``.  If the series is constant
+	or empty the function returns ``(None, None)`` to signal the caller
+	should skip plotting.
+	"""
+	vals = series.dropna()
+	if vals.empty:
+		return None, None
+	min_val = vals.min()
+	max_val = vals.max()
+	if min_val == max_val:
+		return None, None
+	quantiles = vals.quantile(np.linspace(0, 1, n_bins + 1)).tolist()
+	# ensure the edges are strictly increasing
+	edges = sorted(set(quantiles))
+	if len(edges) - 1 < n_bins:
+		# fall back to simple linear spacing if some quantiles collapsed
+		edges = list(np.linspace(min_val, max_val, n_bins + 1))
+	labels = ["xs", "s", "l", "xl"][: len(edges) - 1]
+	return edges, labels
+
+
+def _categorical_bins(series):
+	"""Compute bin boundaries for positive categorical feature counts.
+
+	Zeros are handled separately by callers.  This routine divides the
+	positive values into three groups with roughly equal numbers of
+
+datapoints, returning the corresponding edge values and labels
+	(``xs``, ``s``, ``l``).  When there are too few positive samples the
+	function falls back to the quantile-based helper used elsewhere.
+
+	If the input is empty or there are no positive values the function
+	returns ``(None, None)`` so that the caller can treat the zero-case on
+	their own.
+	"""
+	vals = series.dropna()
+	if vals.empty:
+		return None, None
+	# positive counts only
+	pos = vals[vals > 0]
+	if pos.empty:
+		return None, None
+
+	sorted_pos = pos.sort_values()
+	n = len(sorted_pos)
+	if n < 3:
+		# too few points to split into three, let quantile helper do its work
+		edges, labels = _quantile_bins(pos, n_bins=3)
+		return edges, labels
+
+	# compute split indices for roughly equal-sized buckets
+	indices = [0, int(n / 3), int(2 * n / 3), n - 1]
+	edges = [sorted_pos.iloc[i] for i in indices]
+	# enforce monotonicity and drop duplicates that might collapse bins
+	edges = sorted(set(edges))
+	labels = ["xs", "s", "l"][: len(edges) - 1]
+	return edges, labels
+
 def plot_metric_by_features(df, out_dir, logx=True, kind="line"):
 	sns.set(style="whitegrid")
 
-	# group by metric -> tau -> model
+	# show distribution of metric values across quartile-based bins of
+	# feature count.  each bin contains roughly the same number of
+	# datasets and is labeled ``xs``, ``s``, ``l``, ``xl``; the numeric
+	# range of the smallest bin is shown on the x-axis.
 	for metric, metric_df in df.groupby("metric"):
 		for tau, tau_df in metric_df.groupby("tau"):
-			for model, model_df in tau_df.groupby("model"):
-				if model_df["n_features"].isnull().all():
-					continue
-				# sort by features
-				model_df = model_df.sort_values("n_features")
+			sub = tau_df.dropna(subset=["n_features"])
+			if sub.empty:
+				continue
 
-				plt.figure(figsize=(8, 5))
-				if kind == "line":
-					sns.lineplot(x="n_features", y="value", data=model_df, marker="o")
-				else:
-					sns.scatterplot(x="n_features", y="value", data=model_df)
+			# compute quartile edges and text labels
+			edges, labels = _quantile_bins(sub["n_features"], n_bins=4)
+			if edges is None:
+				continue
+			# bin the data with the fixed labels
+			sub = sub.copy()
+			sub["feat_bin"] = pd.cut(
+				sub["n_features"], bins=edges, labels=labels, include_lowest=True
+			)
 
-				plt.xlabel("Number of Features")
-				metric_label = METRIC_LABELS.get(metric, metric)
-				plt.ylabel(metric_label)
-				plt.title(f"{model} — {metric_label} — tau={tau}")
-				if logx:
-					plt.xscale("log")
+			plt.figure(figsize=(10, 6))
+			sns.boxplot(
+				x="feat_bin",
+				y="value",
+				hue="model",
+				data=sub,
+				showcaps=True,
+				showfliers=False,
+				whiskerprops={"linewidth": 0.5},
+			)
+			plt.xlabel("Number of Features (bin label / range)")
+			# annotate xticks with ranges
+			ranges = [f"{labels[i]}\n{int(edges[i])}-{int(edges[i+1])}"
+				 for i in range(len(labels))]
+			plt.xticks(range(len(ranges)), ranges)
+			metric_label = METRIC_LABELS.get(metric, metric)
+			plt.ylabel(metric_label)
+			title_tau = f" tau={tau}" if tau is not None else ""
+			plt.title(f"Feature distribution — {metric_label}{title_tau}")
 
-				safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
-				out_subdir = os.path.join(out_dir, metric, "by_features", "individual")
-				os.makedirs(out_subdir, exist_ok=True)
-				out_path = os.path.join(out_subdir, f"{model}_tau_{safe_tau}.png")
-				plt.tight_layout()
-				plt.savefig(out_path, dpi=150)
-				plt.close()
+			safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
+			out_subdir = os.path.join(out_dir, metric, "by_features", "distribution")
+			os.makedirs(out_subdir, exist_ok=True)
+			out_path = os.path.join(out_subdir, f"all_models_tau_{safe_tau}.png")
+			plt.tight_layout()
+			plt.savefig(out_path, dpi=150)
+			plt.close()
 
 
 def plot_all_models_together_features(df, out_dir, metric, tau=None, logx=True):
 	sel = df[df["metric"] == metric]
 	if tau is not None:
 		sel = sel[sel["tau"] == tau]
+	# drop rows without feature counts
+	sel = sel.dropna(subset=["n_features"])
 	if sel.empty:
 		return None
 
+	# bin features into equal-count quartiles and compute median per bin
+	edges, labels = _quantile_bins(sel["n_features"], n_bins=4)
+	if edges is None:
+		return None
+	sel = sel.copy()
+	sel["feat_bin"] = pd.cut(
+		sel["n_features"], bins=edges, labels=labels, include_lowest=True
+	)
+	# aggregate both metric value and feature count
+	agg = sel.groupby(["model", "feat_bin"]).agg(
+	value=("value", "median"), n_features=("n_features", "median")
+	).reset_index()
+	# use the median feature count as the plotting coordinate
+	agg["bin_center"] = agg["n_features"]
+
 	plt.figure(figsize=(10, 6))
 	sns.set(style="whitegrid")
-	for model, model_df in sel.groupby("model"):
-		model_df = model_df.sort_values("n_features")
-		plt.plot(model_df["n_features"], model_df["value"], marker="o", label=model)
+	for model, mdf in agg.groupby("model"):
+		plt.plot(mdf["bin_center"], mdf["value"], marker="o", label=model)
 
-	plt.xlabel("Number of Features")
+	plt.xlabel("Number of Features (bin center)")
 	metric_label = METRIC_LABELS.get(metric, metric)
 	plt.ylabel(metric_label)
 	title_tau = f" tau={tau}" if tau is not None else ""
@@ -197,7 +328,7 @@ def plot_all_models_together_features(df, out_dir, metric, tau=None, logx=True):
 	plt.legend()
 	plt.tight_layout()
 	safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
-	out_subdir = os.path.join(out_dir, metric, "by_features", "comparison")
+	out_subdir = os.path.join(out_dir, metric, "by_features", "comparison_binned")
 	os.makedirs(out_subdir, exist_ok=True)
 	out_path = os.path.join(out_subdir, f"all_models_tau_{safe_tau}.png")
 	plt.savefig(out_path, dpi=150)
@@ -208,35 +339,81 @@ def plot_all_models_together_features(df, out_dir, metric, tau=None, logx=True):
 def plot_metric_by_categorical_features(df, out_dir, logx=False, kind="line"):
 	sns.set(style="whitegrid")
 
-	# group by metric -> tau -> model
+	# analogous to instances/features plots but reserve a zero bin
 	for metric, metric_df in df.groupby("metric"):
 		for tau, tau_df in metric_df.groupby("tau"):
-			for model, model_df in tau_df.groupby("model"):
-				if model_df["n_categorical_features"].isnull().all():
-					continue
-				# sort by categorical features
-				model_df = model_df.sort_values("n_categorical_features")
+			sub = tau_df.dropna(subset=["n_categorical_features"])
+			if sub.empty:
+				continue
 
-				plt.figure(figsize=(8, 5))
-				if kind == "line":
-					sns.lineplot(x="n_categorical_features", y="value", data=model_df, marker="o")
-				else:
-					sns.scatterplot(x="n_categorical_features", y="value", data=model_df)
-
+			edges, labels = _categorical_bins(sub["n_categorical_features"])
+			if edges is None:
+				# either constant or only zeros; we'll still plot zeros if present
+				# create a dummy bin
+				sub = sub.copy()
+				sub["cat_bin"] = sub["n_categorical_features"].apply(lambda x: "0" if x == 0 else "")
+				plt.figure(figsize=(10, 6))
+				sns.boxplot(
+					x="cat_bin",
+					y="value",
+					data=sub[sub["cat_bin"] == "0"],
+					showcaps=True,
+					showfliers=False,
+					whiskerprops={"linewidth": 0.5},
+				)
 				plt.xlabel("Number of Categorical Features")
 				metric_label = METRIC_LABELS.get(metric, metric)
 				plt.ylabel(metric_label)
-				plt.title(f"{model} — {metric_label} — tau={tau}")
-				if logx:
-					plt.xscale("log")
-
+				title_tau = f" tau={tau}" if tau is not None else ""
+				plt.title(f"Categorical feature distribution — {metric_label}{title_tau}")
 				safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
-				out_subdir = os.path.join(out_dir, metric, "by_categorical_features", "individual")
+				out_subdir = os.path.join(out_dir, metric, "by_categorical_features", "distribution")
 				os.makedirs(out_subdir, exist_ok=True)
-				out_path = os.path.join(out_subdir, f"{model}_tau_{safe_tau}.png")
+				out_path = os.path.join(out_subdir, f"all_models_tau_{safe_tau}.png")
 				plt.tight_layout()
 				plt.savefig(out_path, dpi=150)
 				plt.close()
+				continue
+
+			sub = sub.copy()
+			# assign bins: zeros separately
+			pos_mask = sub["n_categorical_features"] > 0
+			sub.loc[~pos_mask, "cat_bin"] = "0"
+			sub.loc[pos_mask, "cat_bin"] = pd.cut(
+				sub.loc[pos_mask, "n_categorical_features"],
+				bins=edges,
+				labels=labels,
+				include_lowest=True,
+			)
+
+			plt.figure(figsize=(10, 6))
+			sns.boxplot(
+				x="cat_bin",
+				y="value",
+				hue="model",
+				data=sub,
+				showcaps=True,
+				showfliers=False,
+				whiskerprops={"linewidth": 0.5},
+			)
+			plt.xlabel("Number of Categorical Features (bin label / range)")
+			# annotate xticks with ranges; zero has no numeric range
+			ranges = ["0"]
+			for i, lab in enumerate(labels):
+				ranges.append(f"{lab}\n{int(edges[i])}-{int(edges[i+1])}")
+			plt.xticks(range(len(ranges)), ranges)
+			metric_label = METRIC_LABELS.get(metric, metric)
+			plt.ylabel(metric_label)
+			title_tau = f" tau={tau}" if tau is not None else ""
+			plt.title(f"Categorical feature distribution — {metric_label}{title_tau}")
+
+			safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
+			out_subdir = os.path.join(out_dir, metric, "by_categorical_features", "distribution")
+			os.makedirs(out_subdir, exist_ok=True)
+			out_path = os.path.join(out_subdir, f"all_models_tau_{safe_tau}.png")
+			plt.tight_layout()
+			plt.savefig(out_path, dpi=150)
+			plt.close()
 
 
 
@@ -247,13 +424,40 @@ def plot_all_models_together_categorical_features(df, out_dir, metric, tau=None,
 	if sel.empty:
 		return None
 
+	# drop NaNs then allocate zeros plus three equal bins
+	sel = sel.dropna(subset=["n_categorical_features"])
+	edges, labels = _categorical_bins(sel["n_categorical_features"])
+	if edges is None:
+		# only zeros or insufficient variation: handle separately
+		sel = sel.copy()
+		sel["cat_bin"] = sel["n_categorical_features"].apply(lambda x: "0" if x == 0 else "")
+		agg = sel[sel["cat_bin"] == "0"].groupby(["model", "cat_bin"]).agg(
+			value=("value", "median"),
+			n_cat=("n_categorical_features", "median"),
+		).reset_index()
+		agg["bin_center"] = agg["n_cat"]
+	else:
+		sel = sel.copy()
+		pos_mask = sel["n_categorical_features"] > 0
+		sel.loc[~pos_mask, "cat_bin"] = "0"
+		sel.loc[pos_mask, "cat_bin"] = pd.cut(
+			sel.loc[pos_mask, "n_categorical_features"],
+			bins=edges,
+			labels=labels,
+			include_lowest=True,
+		)
+		agg = sel.groupby(["model", "cat_bin"]).agg(
+			value=("value", "median"),
+			n_cat=("n_categorical_features", "median"),
+		).reset_index()
+		agg["bin_center"] = agg["n_cat"]
+
 	plt.figure(figsize=(10, 6))
 	sns.set(style="whitegrid")
-	for model, model_df in sel.groupby("model"):
-		model_df = model_df.sort_values("n_categorical_features")
-		plt.plot(model_df["n_categorical_features"], model_df["value"], marker="o", label=model)
+	for model, mdf in agg.groupby("model"):
+		plt.plot(mdf["bin_center"], mdf["value"], marker="o", label=model)
 
-	plt.xlabel("Number of Categorical Features")
+	plt.xlabel("Number of Categorical Features (bin center)")
 	metric_label = METRIC_LABELS.get(metric, metric)
 	plt.ylabel(metric_label)
 	title_tau = f" tau={tau}" if tau is not None else ""
@@ -263,7 +467,7 @@ def plot_all_models_together_categorical_features(df, out_dir, metric, tau=None,
 	plt.legend()
 	plt.tight_layout()
 	safe_tau = str(tau).replace(".", "_") if tau is not None else "none"
-	out_subdir = os.path.join(out_dir, metric, "by_categorical_features", "comparison")
+	out_subdir = os.path.join(out_dir, metric, "by_categorical_features", "comparison_binned")
 	os.makedirs(out_subdir, exist_ok=True)
 	out_path = os.path.join(out_subdir, f"all_models_tau_{safe_tau}.png")
 	plt.savefig(out_path, dpi=150)
@@ -429,8 +633,52 @@ def generate_html_index(out_dir, metrics):
 			</div>
 """
 				html_content += """		</div>
+"""				# additional categorical bins
+				dist_dir = os.path.join(by_cat_feat_dir, "distribution")
+				if os.path.exists(dist_dir):
+					html_content += """\t\t<h4>📊 Distribution</h4>
+			<div class=\"plot-grid\">
 """
-		
+					for png_file in sorted(os.listdir(dist_dir)):
+						if png_file.endswith(".png"):
+							rel_path = os.path.relpath(os.path.join(dist_dir, png_file), out_dir)
+							html_content += f"""\t\t	<div class=\"plot-item comparison\">\n\t\t\t\t<h4>{png_file.replace('.png','').replace('_',' ')}</h4>\n\t\t\t\t<a href=\"{rel_path}\">📸 View Plot</a>\n\t\t\t</div>\n"""
+					html_content += """\t\t</div>
+"""
+				compb_dir = os.path.join(by_cat_feat_dir, "comparison_binned")
+				if os.path.exists(compb_dir):
+					html_content += """\t\t<h4>🔄 Model Comparison (binned)</h4>
+			<div class=\"plot-grid\">
+"""
+					for png_file in sorted(os.listdir(compb_dir)):
+						if png_file.endswith(".png"):
+							rel_path = os.path.relpath(os.path.join(compb_dir, png_file), out_dir)
+							html_content += f"""\t\t	<div class=\"plot-item comparison\">\n\t\t\t\t<h4>{png_file.replace('.png','').replace('_',' ')}</h4>\n\t\t\t\t<a href=\"{rel_path}\">📸 View Plot</a>\n\t\t\t</div>\n"""
+					html_content += """\t\t</div>
+"""		
+		# additional bins for instances
+			dist_dir = os.path.join(by_inst_dir, "distribution")
+			if os.path.exists(dist_dir):
+				html_content += """\t\t<h4>📊 Distribution</h4>
+        <div class=\"plot-grid\">
+"""
+				for png_file in sorted(os.listdir(dist_dir)):
+					if png_file.endswith(".png"):
+						rel_path = os.path.relpath(os.path.join(dist_dir, png_file), out_dir)
+						html_content += f"""            <div class=\"plot-item comparison\">\n                <h4>{png_file.replace('.png','').replace('_',' ')}</h4>\n                <a href=\"{rel_path}\">📸 View Plot</a>\n            </div>\n"""
+					html_content += """        </div>
+"""
+			compb_dir = os.path.join(by_inst_dir, "comparison_binned")
+			if os.path.exists(compb_dir):
+				html_content += """\t\t<h4>🔄 Model Comparison (binned)</h4>
+        <div class=\"plot-grid\">
+"""
+				for png_file in sorted(os.listdir(compb_dir)):
+					if png_file.endswith(".png"):
+						rel_path = os.path.relpath(os.path.join(compb_dir, png_file), out_dir)
+						html_content += f"""            <div class=\"plot-item comparison\">\n                <h4>{png_file.replace('.png','').replace('_',' ')}</h4>\n                <a href=\"{rel_path}\">📸 View Plot</a>\n            </div>\n"""
+					html_content += """        </div>
+"""
 		# By features section
 		by_feat_dir = os.path.join(metric_dir, "by_features")
 		if os.path.exists(by_feat_dir):
