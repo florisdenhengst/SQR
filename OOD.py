@@ -41,6 +41,11 @@ DATASET_ID = int(sys.argv[1])
 tau_argv = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
 sample_size = int(sys.argv[3]) if len(sys.argv) > 3 else 100
 
+# Parse command line arguments with defaults
+tau_argv = float(sys.argv[1]) if len(sys.argv) > 1 else 0.5
+sample_size = int(sys.argv[2]) if len(sys.argv) > 2 else 100
+>>>>>>> upstream/master
+
 def get_feature_type(data_column):
     unique_values = np.unique(data_column)
     num_unique_values = len(unique_values)
