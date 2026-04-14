@@ -14,7 +14,7 @@ module load julia/1.9.3
 
 # This loads the anaconda virtual environment with our packages
 source $HOME/.bashrc
-conda activate sqr-noversion
+conda activate sqr
 
 # Simple trick to create a unique directory for each run of the script
 # echo $$

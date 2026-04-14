@@ -46,17 +46,27 @@ The framework utilizes Genetic Programming techniques to produce explainable mat
 # Running the experiments
 
 ## Generating results
-Run an experiment as follows:
+Run an experiment for dataset with ID ``0`` and ``tau=0.5`` follows:
 ```bash
-python sqr.py 0
+python sqr.py 0 0.5
 ```
-where ``0`` denotes the dataset to run the benchmark on.
+
 To run all experiments, use a bash loop:
 ```bash
 for i in $(seq 0 122)
 do 
-    python sqr.py $i
+    python sqr.py $i 0.5
 done
+```
+
+To run an OOD experiments:
+```bash
+python sqr_OOD.py 0 0.5
+```
+
+To run an experiments using a sampled dataset:
+```bash
+python sqr_sampling.py 0 0.5
 ```
 
 ## Analysing results
@@ -69,6 +79,9 @@ To obtain per-dataset raw results run:
 ```bash
 python analyse_ds.py /path/to/result_file.json
 ```
+
+To analyse across tau levels, see ``analyse_tau_taus.py``
+
 
 ## Troubleshooting
 If `pysr` causes issues, ensure that Julia is correctly installed and update the Julia packages:
