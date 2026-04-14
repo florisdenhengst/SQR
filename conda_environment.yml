@@ -1,4 +1,4 @@
-name: sqr-noversion
+name: sqr
 channels:
   - conda-forge
   - defaults
