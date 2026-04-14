@@ -1,0 +1,9 @@
+\documentclass[tikz,border=10pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\usepgfplotslibrary{groupplots}
+
+\begin{document}
+\begin{tikzpicture}\n\begin{axis}[\n    title={All Metrics Across Quantile Levels},\n    xlabel={$\\tau$},\n    ylabel={Loss (Normalized Pinball)},\n    width=0.9\\textwidth,\n    height=6cm,\n    legend pos=outer north east,\n    xtick={0.5,0.6,0.7,0.8,0.9},\n]\n\\addplot[color=green, dotted, mark=square, mark size=2pt] coordinates {(0.5,0.0387) (0.6,0.0381) (0.7,0.0353) (0.8,0.0295) (0.9,0.0196)};\n\\addlegendentry{DecisionTree - losses}\n\\addplot[color=blue, dashed, mark=o, mark size=2pt] coordinates {(0.5,0.0421) (0.6,0.0438) (0.7,0.0419) (0.8,0.0364) (0.9,0.0244)};\n\\addlegendentry{LightGBM - losses}\n\\addplot[color=purple, dashdotted, mark=diamond, mark size=2pt] coordinates {(0.5,0.0580) (0.6,0.0590) (0.7,0.0584) (0.8,0.0564) (0.9,0.0520)};\n\\addlegendentry{LinearQuantile - losses}\n\\addplot[color=red, solid, mark=*, mark size=2pt] coordinates {(0.5,0.0328) (0.6,0.0317) (0.7,0.0296) (0.8,0.0272) (0.9,inf)};\n\\addlegendentry{SQR - losses}\n\end{axis}\n\end{tikzpicture}\n
+\end{document}

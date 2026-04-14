@@ -1,0 +1,25 @@
+\begin{tikzpicture}[scale=1.0]
+\begin{groupplot}[
+    group style={group size=1 by 1},
+    title={Normalized Pinball Loss vs Quantile Level (τ)},
+]
+\nextgroupplot[
+    xlabel={$\tau$},
+    ylabel={Normalized Loss},
+    width=12cm,
+    height=6cm,
+    legend pos=outer north east,
+    legend columns=2,
+    xtick={0.5,0.6,0.7,0.8,0.9},
+    grid=major,
+]
+\addplot[color=green, dotted, thick, mark=*, mark size=3pt] coordinates {(0.5,0.0387), (0.6,0.0381), (0.7,0.0353), (0.8,0.0295), (0.9,0.0196)};
+\addlegendentry{DecisionTree}
+\addplot[color=blue, dashed, thick, mark=*, mark size=3pt] coordinates {(0.5,0.0421), (0.6,0.0438), (0.7,0.0419), (0.8,0.0364), (0.9,0.0244)};
+\addlegendentry{LightGBM}
+\addplot[color=purple, dashdotted, thick, mark=*, mark size=3pt] coordinates {(0.5,0.0580), (0.6,0.0590), (0.7,0.0584), (0.8,0.0564), (0.9,0.0520)};
+\addlegendentry{LinearQuantile}
+\addplot[color=red, solid, thick, mark=*, mark size=3pt] coordinates {(0.5,0.0328), (0.6,0.0317), (0.7,0.0296), (0.8,0.0272), (0.9,inf)};
+\addlegendentry{SQR}
+\end{groupplot}
+\end{tikzpicture}

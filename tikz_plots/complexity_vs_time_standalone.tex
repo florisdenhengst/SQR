@@ -1,0 +1,9 @@
+\documentclass[tikz,border=10pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\usepgfplotslibrary{groupplots}
+
+\begin{document}
+\begin{tikzpicture}\n\begin{axis}[\n    title={Model Complexity vs Fitting Time Across Quantile Levels},\n    xlabel={$\\tau$},\n    ylabel={Expression/Tree Complexity},\n    width=0.9\\textwidth,\n    height=6cm,\n    legend pos=outer north east,\n    xtick={0.5,0.6,0.7,0.8,0.9},\n]\n\\addplot[color=green, dotted, mark=square, mark size=2pt] coordinates {(0.5,1526.9400) (0.6,1307.1580) (0.7,1050.7267) (0.8,976.8167) (0.9,938.8700)};\n\\addlegendentry{DecisionTree - complexity}\n\\addplot[color=purple, dashdotted, mark=diamond, mark size=2pt] coordinates {(0.5,19.8917) (0.6,19.9412) (0.7,19.8917) (0.8,19.8917) (0.9,19.8917)};\n\\addlegendentry{LinearQuantile - complexity}\n\\addplot[color=red, solid, mark=*, mark size=2pt] coordinates {(0.5,10.1017) (0.6,9.8437) (0.7,9.5983) (0.8,9.7350) (0.9,9.6783)};\n\\addlegendentry{SQR - complexity}\n\end{axis}\n\end{tikzpicture}\n
+\end{document}
