@@ -6,6 +6,35 @@ Symbolic Quantile Regression (SQR) for Interpretable Quantile Predictions is an 
 The framework utilizes Genetic Programming techniques to produce explainable mathematical equations that can be utilized to do quantile predictions in an interpretable manner, to be able to investigate target behavior at several different conditional quantiles. 
 
 
+# Minimal example
+See ``sqr_minimal.py``.
+The core of SQR can be summarized as
+```python
+from pysr import PySRRegressor
+binary_operators = ["+", "*", "/", "-"]
+unary_operators = ["exp", "sin", "cos", "log", "square"]
+complexity_of_operators = {
+    "+": 1,
+    "-": 1,
+    "*": 1,
+    "/": 2,
+    "exp": 4,
+    "sin": 3,
+    "cos": 3,
+    "log": 3,
+    "square": 2,
+}
+target_quantile = 0.5
+regressor = PySRRegressor(
+        niterations=N_ITERS,  # improve for better results50
+        binary_operators=binary_operators,
+        unary_operators=unary_operators,
+        complexity_of_operators=complexity_of_operators,
+        elementwise_loss=f"QuantileLoss({target_quantile})",
+)
+regressor.fit(X_train, y_train)
+```
+
 # Installation Instructions for this Project
 
 ## Requirements
@@ -70,14 +99,15 @@ python sqr_sampling.py 0 0.5
 ```
 
 ## Analysing results
+For the main results analysis, see ``aggregate_results.ipynb``.
+
+For the OOD results analysis, see ``aggreate_results_ood.ipynb``.
+
+For the results across tau levels, see ``aggregate_results_taus.ipybn``.
+
 To run the analysis script on a set of ``.json`` files with results and test for statistical significance, run:
 ```bash
 python analyse.py /path/to/result/files/*.json
-```
-
-To obtain per-dataset raw results run:
-```bash
-python analyse_ds.py /path/to/result_file.json
 ```
 
 To analyse across tau levels, see ``analyse_tau_taus.py``
